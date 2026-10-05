@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Hesap İşlemleri · HAB Online Coaching</title>
+<meta name="robots" content="noindex">
+<meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#0E0B07">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="favicon.png">
+<link rel="apple-touch-icon" href="icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Sora:wght@600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css?v=2">
+<style>
+.box{max-width:440px;margin:0 auto;padding:48px 0 72px}
+.panel{background:linear-gradient(180deg,var(--surface2),var(--surface));border:1px solid var(--border);border-radius:var(--radius);padding:28px}
+.panel h1{font-size:26px;line-height:1.2;margin:14px 0 10px}
+.panel p{color:var(--soft);margin:0 0 18px}
+label{display:block;font-size:14px;color:var(--muted);margin:0 0 6px}
+input{width:100%;font:inherit;color:var(--text);background:var(--bg);border:1px solid var(--border2);border-radius:12px;padding:12px 14px;margin:0 0 14px}
+input:focus{outline:2px solid var(--gold);outline-offset:1px}
+.btn{display:block;width:100%;text-align:center;font:600 16px Inter,sans-serif;color:#1A1309;background:linear-gradient(135deg,var(--gold2),var(--gold));border:0;border-radius:12px;padding:14px;cursor:pointer;text-decoration:none}
+.btn[disabled]{opacity:.6;cursor:wait}
+.err{color:#F2A08F;font-size:14px;margin:0 0 14px}
+.hint{color:var(--muted);font-size:13px;margin:14px 0 0}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<header class="top"><div class="wrap"><a class="logo" href="index.html" aria-label="HAB Online Coaching ana sayfa"><img src="wordmark-sm.png?v=2" alt="HAB Online Coaching" width="80" height="41"></a></div></header>
+<main><div class="wrap"><div class="box">
+
+<section class="panel" id="v-password" hidden>
+  <span class="eyebrow">Hesap</span>
+  <h1>Yeni şifreni belirle</h1>
+  <p>En az 8 karakter olsun; harf ve rakam içersin.</p>
+  <form id="f-password" novalidate>
+    <label for="p1">Yeni şifre</label>
+    <input id="p1" type="password" autocomplete="new-password" minlength="8" required>
+    <label for="p2">Yeni şifre (tekrar)</label>
+    <input id="p2" type="password" autocomplete="new-password" minlength="8" required>
+    <p class="err" id="e-password" hidden></p>
+    <button class="btn" type="submit">Şifremi kaydet</button>
+  </form>
+</section>
+
+<section class="panel" id="v-confirm" hidden>
+  <span class="eyebrow">Hesap</span>
+  <h1 id="t-confirm">E-posta adresini doğrula</h1>
+  <p id="d-confirm">Hesabını etkinleştirmek için aşağıdaki butona dokun.</p>
+  <button class="btn" id="b-confirm" type="button">E-postamı doğrula</button>
+</section>
+
+<section class="panel" id="v-done" hidden>
+  <span class="eyebrow">Tamam</span>
+  <h1 id="t-done">İşlem tamamlandı</h1>
+  <p id="d-done"></p>
+  <a class="btn" href="habcoaching://sign-in">Uygulamayı aç</a>
+  <p class="hint">Buton çalışmazsa HAB Online Coaching uygulamasını kendin açıp giriş yapabilirsin.</p>
+</section>
+
+<section class="panel" id="v-error" hidden>
+  <span class="eyebrow">Bağlantı</span>
+  <h1>Bağlantı geçersiz</h1>
+  <p id="d-error">Bağlantının süresi dolmuş ya da daha önce kullanılmış olabilir. Uygulamadan yeni bir bağlantı iste ve yalnızca en son gelen e-postadaki bağlantıyı kullan.</p>
+  <a class="btn" href="habcoaching://forgot-password">Uygulamayı aç</a>
+</section>
+
+</div></div></main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script>
+(function () {
+  // Uygulamaya da gömülü olan açık (publishable) anahtar; gizli değildir
+  var sb = window.supabase.createClient('https://osmniitewhkxpkeuvbzi.supabase.co', 'sb_publishable_0pp-zyk5Qqmq4cdueDwzig_8zZWlBcm', {
+    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false }
+  });
+  var q = new URLSearchParams(location.search);
+  var tokenHash = q.get('token_hash');
+  var type = q.get('type');
+  // Bağlantıdaki kod adres çubuğunda ve tarayıcı geçmişinde kalmasın
+  history.replaceState(null, '', location.pathname);
+
+  function show(id) {
+    ['v-password', 'v-confirm', 'v-done', 'v-error'].forEach(function (v) { document.getElementById(v).hidden = v !== id; });
+  }
+  function done(title, text) {
+    document.getElementById('t-done').textContent = title;
+    document.getElementById('d-done').textContent = text;
+    show('v-done');
+  }
+  function fail(e) {
+    var m = String((e && e.message) || e || '');
+    if (m && !/expired|invalid|not found/i.test(m)) document.getElementById('d-error').textContent = 'Bir hata oluştu: ' + m;
+    show('v-error');
+  }
+
+  if (!tokenHash || !type) { show('v-error'); return; }
+
+  // Kod yalnızca butona basılınca kullanılır: bazı e-posta servisleri bağlantıları
+  // kullanıcıdan önce açtığından, sayfa açılır açılmaz doğrulamak kodu tüketirdi
+  var verified = false;
+  function verify(otpType) {
+    if (verified) return Promise.resolve();
+    return sb.auth.verifyOtp({ token_hash: tokenHash, type: otpType }).then(function (r) {
+      if (r.error) throw r.error;
+      verified = true;
+    });
+  }
+
+  if (type === 'recovery' || type === 'invite') {
+    show('v-password');
+    var form = document.getElementById('f-password');
+    var err = document.getElementById('e-password');
+    form.addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      var p1 = document.getElementById('p1').value;
+      var p2 = document.getElementById('p2').value;
+      err.hidden = true;
+      var msg = p1.length < 8 || !/[A-Za-zÇĞİÖŞÜçğıöşü]/.test(p1) || !/\d/.test(p1)
+        ? 'Şifre en az 8 karakter olmalı, harf ve rakam içermeli.'
+        : p1 !== p2 ? 'Şifreler eşleşmiyor.' : null;
+      if (msg) { err.textContent = msg; err.hidden = false; return; }
+      var btn = form.querySelector('button');
+      btn.disabled = true;
+      verify(type)
+        .then(function () { return sb.auth.updateUser({ password: p1 }); })
+        .then(function (r) {
+          if (r && r.error) throw r.error;
+          return sb.auth.signOut({ scope: 'local' });
+        })
+        .then(function () {
+          done('Şifren kaydedildi', 'Artık uygulamada e-posta adresin ve yeni şifrenle giriş yapabilirsin.');
+        })
+        .catch(function (e) {
+          btn.disabled = false;
+          if (!verified) return fail(e);
+          var m = String((e && e.message) || e);
+          err.textContent = /different/i.test(m) ? 'Yeni şifre eskisinden farklı olmalı.'
+            : /weak|least|characters/i.test(m) ? 'Şifre yeterince güçlü değil, başka bir şifre dene.'
+            : 'Şifre kaydedilemedi: ' + m;
+          err.hidden = false;
+        });
+    });
+  } else if (type === 'email' || type === 'signup' || type === 'email_change' || type === 'magiclink') {
+    if (type === 'email_change') {
+      document.getElementById('t-confirm').textContent = 'E-posta değişikliğini onayla';
+      document.getElementById('d-confirm').textContent = 'Hesabındaki e-posta adresini güncellemek için aşağıdaki butona dokun.';
+      document.getElementById('b-confirm').textContent = 'Değişikliği onayla';
+    }
+    show('v-confirm');
+    var b = document.getElementById('b-confirm');
+    b.addEventListener('click', function () {
+      b.disabled = true;
+      verify(type === 'signup' ? 'email' : type)
+        .then(function () { return sb.auth.signOut({ scope: 'local' }); })
+        .then(function () {
+          done(type === 'email_change' ? 'E-posta adresin güncellendi' : 'E-posta adresin doğrulandı',
+            'Uygulamaya dönüp e-posta adresin ve şifrenle giriş yapabilirsin.');
+        })
+        .catch(function (e) { b.disabled = false; fail(e); });
+    });
+  } else {
+    show('v-error');
+  }
+})();
+</script>
+</body>
+</html>
